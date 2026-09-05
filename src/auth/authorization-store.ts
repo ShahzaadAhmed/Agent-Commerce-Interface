@@ -37,16 +37,43 @@ export class AuthorizationStore {
     return structuredClone(authorization);
   }
 
-  markUsed(authorizationId: string): PaymentAuthorization {
+  beginProviderAttempt(authorizationId: string): PaymentAuthorization {
     const authorization = this.authorizations.get(authorizationId);
     if (!authorization) throw new DomainError('UNAUTHORIZED', 'The supplied payment authorization does not exist.');
     if (authorization.status !== 'pending') {
-      throw new DomainError('AUTHORIZATION_ALREADY_USED', 'This payment authorization can no longer be used.', {
+      throw new DomainError('AUTHORIZATION_ALREADY_USED', 'This payment authorization can no longer start a provider request.', {
+        status: authorization.status,
+      });
+    }
+    authorization.status = 'in_flight';
+    authorization.inFlightAt = new Date().toISOString();
+    return structuredClone(authorization);
+  }
+
+  markUsed(authorizationId: string, razorpayOrderId: string): PaymentAuthorization {
+    const authorization = this.authorizations.get(authorizationId);
+    if (!authorization) throw new DomainError('UNAUTHORIZED', 'The supplied payment authorization does not exist.');
+    if (authorization.status !== 'in_flight') {
+      throw new DomainError('AUTHORIZATION_ALREADY_USED', 'This payment authorization is not awaiting a provider result.', {
         status: authorization.status,
       });
     }
     authorization.status = 'used';
     authorization.usedAt = new Date().toISOString();
+    authorization.razorpayOrderId = razorpayOrderId;
+    return structuredClone(authorization);
+  }
+
+  markPaymentStateUnknown(authorizationId: string): PaymentAuthorization {
+    const authorization = this.authorizations.get(authorizationId);
+    if (!authorization) throw new DomainError('UNAUTHORIZED', 'The supplied payment authorization does not exist.');
+    if (authorization.status !== 'in_flight') {
+      throw new DomainError('AUTHORIZATION_ALREADY_USED', 'This payment authorization is not awaiting a provider result.', {
+        status: authorization.status,
+      });
+    }
+    authorization.status = 'payment_state_unknown';
+    authorization.unknownAt = new Date().toISOString();
     return structuredClone(authorization);
   }
 }
