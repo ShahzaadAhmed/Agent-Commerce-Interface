@@ -56,7 +56,7 @@ export interface CheckoutSnapshot {
   demoPriceChangeOnNextValidation: boolean;
 }
 
-export type AuthorizationStatus = 'pending' | 'in_flight' | 'used' | 'expired' | 'revoked' | 'payment_state_unknown';
+export type AuthorizationStatus = 'pending' | 'in_flight' | 'used' | 'failed' | 'expired' | 'revoked' | 'payment_state_unknown';
 
 export interface PaymentAuthorization {
   id: string;
@@ -71,6 +71,7 @@ export interface PaymentAuthorization {
   usedAt?: string;
   razorpayOrderId?: string;
   unknownAt?: string;
+  failedAt?: string;
 }
 
 export interface DomainErrorShape {

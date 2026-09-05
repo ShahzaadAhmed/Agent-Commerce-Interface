@@ -8,7 +8,7 @@ import type { ToolDependencies } from './tool-helpers.js';
 import { runAudited } from './tool-helpers.js';
 
 const authorizationSchema = z.object({
-  authorizationId: z.string(), checkoutId: z.string(), merchantId: z.string(), amountPaise: z.number().int().positive(), currency: z.literal('INR'), expiresAt: z.string(), status: z.enum(['pending', 'in_flight', 'used', 'expired', 'revoked', 'payment_state_unknown']),
+  authorizationId: z.string(), checkoutId: z.string(), merchantId: z.string(), amountPaise: z.number().int().positive(), currency: z.literal('INR'), expiresAt: z.string(), status: z.enum(['pending', 'in_flight', 'used', 'failed', 'expired', 'revoked', 'payment_state_unknown']),
 });
 const authorizationOutputSchema = z.object({ authorization: authorizationSchema, message: z.string() });
 const paymentOutputSchema = z.object({ order_id: z.string(), amount_paise: z.number().int().positive(), currency: z.literal('INR'), razorpay_order_status: z.string(), payment_status: z.literal('payment_not_completed'), message: z.string() });
@@ -83,13 +83,29 @@ export function registerPaymentTools(
             notes: { checkout_id: input.checkout_id, authorization_id: input.authorization_id },
           });
         } catch (error) {
+          if (error instanceof DomainError && error.code === 'PAYMENT_PROVIDER_ERROR') {
+            authorizations.markFailed(input.authorization_id);
+            await dependencies.audit.record({
+              requestId: context.requestId,
+              action: 'razorpay_order_request',
+              outcome: 'failure',
+              reason: error.code,
+              sessionId: input.session_id,
+              checkoutId: input.checkout_id,
+              authorizationId: input.authorization_id,
+              merchantId: input.merchant_id,
+              amountPaise: input.amount_paise,
+              currency: input.currency,
+            });
+            throw error;
+          }
+
           authorizations.markPaymentStateUnknown(input.authorization_id);
-          const reason = error instanceof DomainError ? error.code : 'PAYMENT_STATE_UNKNOWN';
           await dependencies.audit.record({
             requestId: context.requestId,
             action: 'razorpay_order_request',
             outcome: 'failure',
-            reason,
+            reason: 'PAYMENT_STATE_UNKNOWN',
             sessionId: input.session_id,
             checkoutId: input.checkout_id,
             authorizationId: input.authorization_id,
@@ -100,7 +116,7 @@ export function registerPaymentTools(
           if (error instanceof RazorpayRequestUncertainError) {
             throw new DomainError('PAYMENT_STATE_UNKNOWN', 'Razorpay request state is unknown. Do not retry automatically; verify provider state before another financial action.');
           }
-          throw error;
+          throw new DomainError('PAYMENT_STATE_UNKNOWN', 'Unexpected error occurred while processing the Razorpay order. Provider outcome is uncertain.');
         }
         authorizations.markUsed(input.authorization_id, result.orderId);
         await dependencies.audit.record({
@@ -130,7 +146,7 @@ export function registerPaymentTools(
 }
 
 function presentAuthorization(authorization: {
-  id: string; checkoutId: string; merchantId: string; amountPaise: number; currency: 'INR'; expiresAt: string; status: 'pending' | 'in_flight' | 'used' | 'expired' | 'revoked' | 'payment_state_unknown';
+  id: string; checkoutId: string; merchantId: string; amountPaise: number; currency: 'INR'; expiresAt: string; status: 'pending' | 'in_flight' | 'used' | 'failed' | 'expired' | 'revoked' | 'payment_state_unknown';
 }) {
   return { authorizationId: authorization.id, checkoutId: authorization.checkoutId, merchantId: authorization.merchantId, amountPaise: authorization.amountPaise, currency: authorization.currency, expiresAt: authorization.expiresAt, status: authorization.status };
 }

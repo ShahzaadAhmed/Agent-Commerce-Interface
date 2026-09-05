@@ -64,6 +64,19 @@ export class AuthorizationStore {
     return structuredClone(authorization);
   }
 
+  markFailed(authorizationId: string): PaymentAuthorization {
+    const authorization = this.authorizations.get(authorizationId);
+    if (!authorization) throw new DomainError('UNAUTHORIZED', 'The supplied payment authorization does not exist.');
+    if (authorization.status !== 'in_flight') {
+      throw new DomainError('AUTHORIZATION_ALREADY_USED', 'This payment authorization is not awaiting a provider result.', {
+        status: authorization.status,
+      });
+    }
+    authorization.status = 'failed';
+    authorization.failedAt = new Date().toISOString();
+    return structuredClone(authorization);
+  }
+
   markPaymentStateUnknown(authorizationId: string): PaymentAuthorization {
     const authorization = this.authorizations.get(authorizationId);
     if (!authorization) throw new DomainError('UNAUTHORIZED', 'The supplied payment authorization does not exist.');
